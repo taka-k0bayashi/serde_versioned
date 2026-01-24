@@ -1,0 +1,15 @@
+[workspace]
+members = ["serde_versioned", "serde_versioned_derive"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[package]
+name = "serde_versioned_tests"
+
+[dev-dependencies]
+serde_versioned = { path = "serde_versioned" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
