@@ -1,9 +1,16 @@
 [package]
 name = "serde_versioned_derive"
-#version.workspace = true
-#edition.workspace = true
 version = "0.1.0"
 edition = "2024"
+authors = ["Takahiro Kobayashi <takahiro1209work@gmail.com>"]
+description = "Procedural macro for serde_versioned library"
+license = "MIT"
+repository = "https://github.com/taka-k0bayashi/serde_versioned"
+homepage   = "https://github.com/taka-k0bayashi/serde_versioned"
+documentation = "https://docs.rs/serde_versioned_derive"
+keywords = ["serde", "serialization", "versioning", "proc-macro", "derive"]
+categories = ["encoding", "no-std"]
+readme = "../README.md"
 
 [lib]
 name = "serde_versioned_derive"

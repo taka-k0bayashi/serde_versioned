@@ -2,7 +2,16 @@
 name = "serde_versioned"
 version = "0.1.0"
 edition = "2024"
+authors = ["Takahiro Kobayashi <takahiro1209work@gmail.com>"]
+description = "A Rust library for handling versioned serialization and deserialization with backward compatibility support"
+license = "MIT"
+repository = "https://github.com/taka-k0bayashi/serde_versioned"
+homepage   = "https://github.com/taka-k0bayashi/serde_versioned"
+documentation = "https://docs.rs/serde_versioned"
+keywords = ["serde", "serialization", "versioning", "backward-compatibility", "deserialization"]
+categories = ["encoding", "no-std"]
+readme = "../README.md"
 
 [dependencies]
-serde_versioned_derive = { path = "../serde_versioned_derive" }
+serde_versioned_derive = { path = "../serde_versioned_derive", version = "0.1.0" }
 serde = { version = "1.0", features = ["derive"] }
