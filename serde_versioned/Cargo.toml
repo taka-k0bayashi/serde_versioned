@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/taka-k0bayashi/serde_versioned"
 homepage   = "https://github.com/taka-k0bayashi/serde_versioned"
 documentation = "https://docs.rs/serde_versioned"
-keywords = ["serde", "serialization", "versioning", "backward-compatibility", "deserialization"]
+keywords = ["serde", "serialization", "versioning", "compatibility", "deserialization"]
 categories = ["encoding", "no-std"]
 readme = "../README.md"
 
