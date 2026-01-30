@@ -1,4 +1,4 @@
-//! # serde_versioned_derive
+//! # `serde_versioned_derive`
 //!
 //! Procedural macro derive for the `Versioned` trait.
 //!
@@ -29,6 +29,11 @@ use proc_macro2::TokenStream as TokenStream2;
 /// - Each version struct must implement `FromVersion<CurrentStruct>`
 /// - Each version struct must implement `Serialize`, `Deserialize`, and `Clone`
 ///
+/// # Panics
+///
+/// This function will panic if `versions` is empty (which should be caught during compilation),
+/// or if the latest version cannot be determined.
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -47,15 +52,12 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     
     // Generate the version enum name (e.g., UserVersion for struct User)
     let version_enum_name = syn::Ident::new(
-        &format!("{}Version", struct_name),
+        &format!("{struct_name}Version"),
         struct_name.span()
     );
     
     // Extract version structs from the versioned attribute
-    let versions = match extract_versions(&input) {
-        Ok(v) => v,
-        Err(e) => return e.to_compile_error().into(),
-    };
+    let versions = extract_versions(&input);
     
     // Validate that at least one version is specified
     if versions.is_empty() {
@@ -70,7 +72,7 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     // Generate enum variants for each version (e.g., Version1(UserV1), Version2(UserV2))
     let version_variants: Vec<_> = versions.iter().map(|(version_num, version_struct)| {
         let version_ident = syn::Ident::new(
-            &format!("Version{}", version_num),
+            &format!("Version{version_num}"),
             version_struct.span()
         );
         quote! {
@@ -91,18 +93,18 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     // Generate match arms for from_version implementation
     let from_version_match_arms: Vec<_> = versions.iter().map(|(version_num, version_struct)| {
         let version_ident = syn::Ident::new(
-            &format!("Version{}", version_num),
+            &format!("Version{version_num}"),
             version_struct.span()
         );
         quote! {
-            #version_enum_name::#version_ident(v) => Ok(crate::FromVersion::convert(v)),
+            #version_enum_name::#version_ident(v) => Ok(serde_versioned::FromVersion::convert(v)),
         }
     }).collect();
     
     // Get the latest version for to_version implementation
     let (latest_version_num, latest_version_struct) = versions.last().unwrap();
     let latest_version_ident = syn::Ident::new(
-        &format!("Version{}", latest_version_num),
+        &format!("Version{latest_version_num}"),
         latest_version_struct.span()
     );
     
@@ -135,7 +137,7 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #version_enum
         
-        impl crate::Versioned for #struct_name {
+        impl serde_versioned::Versioned for #struct_name {
             type VersionEnum = #version_enum_name;
             
             fn from_version(version: Self::VersionEnum) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
@@ -156,7 +158,7 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
 /// Extracts version struct names from the `versioned` attribute.
 ///
 /// Parses the `#[versioned(versions = [V1, V2, ...])]` attribute and returns
-/// a vector of tuples containing (version_number, struct_ident).
+/// a vector of tuples containing (`version_number`, `struct_ident`).
 ///
 /// # Arguments
 ///
@@ -167,32 +169,28 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
 /// A vector of tuples where each tuple contains:
 /// - A string version number (e.g., "1", "2")
 /// - The identifier of the version struct
-fn extract_versions(input: &DeriveInput) -> Result<Vec<(String, syn::Ident)>, syn::Error> {
+fn extract_versions(input: &DeriveInput) -> Vec<(String, syn::Ident)> {
     let mut versions = Vec::new();
     
     // Search for the versioned attribute
     for attr in &input.attrs {
-        if attr.path().is_ident("versioned") {
-            match &attr.meta {
-                Meta::List(meta_list) => {
-                    // Parse the format: versioned(versions = [SettingV1, SettingV2])
-                    let tokens: TokenStream2 = meta_list.tokens.clone().into();
-                    let result = syn::parse2::<VersionsList>(tokens);
-                    if let Ok(versions_list) = result {
-                        versions = versions_list.versions;
-                    }
-                }
-                _ => {}
+        if attr.path().is_ident("versioned")
+            && let Meta::List(meta_list) = &attr.meta {
+            // Parse the format: versioned(versions = [SettingV1, SettingV2])
+            let tokens: TokenStream2 = meta_list.tokens.clone();
+            let result = syn::parse2::<VersionsList>(tokens);
+            if let Ok(versions_list) = result {
+                versions = versions_list.versions;
             }
         }
     }
     
-    Ok(versions)
+    versions
 }
 
 /// Structure representing the parsed versions list from the attribute.
 struct VersionsList {
-    /// Vector of (version_number, struct_identifier) tuples
+    /// Vector of (`version_number`, `struct_identifier`) tuples
     versions: Vec<(String, syn::Ident)>,
 }
 
@@ -224,13 +222,12 @@ impl syn::parse::Parse for VersionsList {
         let mut versions = Vec::new();
         // Convert each struct identifier to a version number (1-indexed)
         for (idx, elem) in elems.iter().enumerate() {
-            if let syn::Expr::Path(path) = elem {
-                if let Some(ident) = path.path.get_ident() {
-                    let version_num = (idx + 1).to_string();
-                    versions.push((version_num, ident.clone()));
-                }
+            if let syn::Expr::Path(path) = elem
+                && let Some(ident) = path.path.get_ident() {
+                let version_num = (idx + 1).to_string();
+                versions.push((version_num, ident.clone()));
             }
         }
-        Ok(VersionsList { versions })
+        Ok(Self { versions })
     }
 }

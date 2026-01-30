@@ -1,4 +1,4 @@
-//! # serde_versioned
+//! # `serde_versioned`
 //!
 //! A library for handling versioned serialization and deserialization of Rust structs.
 //! This crate provides traits and derive macros to support multiple versions of data structures
@@ -162,7 +162,7 @@ pub trait Versioned: Sized {
     /// use serde_versioned::Versioned;
     ///
     /// let json = r#"{"version":"1","name":"Alice"}"#;
-    /// let user = User::from_format(json, |s| serde_json::from_str(s)).unwrap();
+    /// let user = User::from_format(json, serde_json::from_str).unwrap();
     /// ```
     fn from_format<'a, F, E>(input: &'a str, deserializer: F) -> Result<Self, FormatError<E>>
     where
@@ -189,13 +189,17 @@ pub trait Versioned: Sized {
     /// * `Ok(T)` - Successfully serialized data
     /// * `Err(E)` - Error during serialization
     ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails.
+    ///
     /// # Example
     ///
     /// ```rust,no_run
     /// use serde_versioned::Versioned;
     ///
     /// let user = User { name: "Alice".to_string(), age: 30 };
-    /// let json = user.to_format(|v| serde_json::to_string(v)).unwrap();
+    /// let json = user.to_format(serde_json::to_string).unwrap();
     /// ```
     fn to_format<F, T, E>(&self, serializer: F) -> Result<T, E>
     where
@@ -220,8 +224,8 @@ pub enum FormatError<E> {
 impl<E: Error + Send + Sync + 'static> Error for FormatError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            FormatError::Deserialize(e) => Some(e),
-            FormatError::VersionConversion(e) => Some(e.as_ref()),
+            Self::Deserialize(e) => Some(e),
+            Self::VersionConversion(e) => Some(e.as_ref()),
         }
     }
 }
@@ -229,8 +233,8 @@ impl<E: Error + Send + Sync + 'static> Error for FormatError<E> {
 impl<E: Error + Send + Sync + 'static> std::fmt::Display for FormatError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FormatError::Deserialize(e) => write!(f, "Deserialization error: {}", e),
-            FormatError::VersionConversion(e) => write!(f, "Version conversion error: {}", e),
+            Self::Deserialize(e) => write!(f, "Deserialization error: {e}"),
+            Self::VersionConversion(e) => write!(f, "Version conversion error: {e}"),
         }
     }
 }

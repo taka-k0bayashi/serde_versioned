@@ -111,7 +111,7 @@ assert_eq!(user, user_restored);
 ```rust
 // Deserialize an older version (v1) and convert to current
 let v1_json = r#"{"version":"1","name":"Eve"}"#;
-let user = User::from_format(v1_json, |s| serde_json::from_str(s)).unwrap();
+let user = User::from_format(v1_json, serde_json::from_str).unwrap();
 assert_eq!(user.name, "Eve");
 assert_eq!(user.age, 0); // default value from conversion
 ```
@@ -124,10 +124,10 @@ let user = User {
     name: "Frank".to_string(),
     age: 40,
 };
-let json = user.to_format(|v| serde_json::to_string(v)).unwrap();
+let json = user.to_format(serde_json::to_string).unwrap();
 
 // Deserialize using convenience method
-let user = User::from_format(&json, |s| serde_json::from_str(s)).unwrap();
+let user = User::from_format(&json, serde_json::from_str).unwrap();
 ```
 
 ## Requirements

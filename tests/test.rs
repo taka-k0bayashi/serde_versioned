@@ -1,7 +1,7 @@
 extern crate serde_versioned;
 extern crate serde;
 
-use serde_versioned::{Versioned, FromVersion};
+use serde_versioned::Versioned;
 use serde::{Deserialize, Serialize};
 
 #[derive(Versioned, Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -113,7 +113,7 @@ fn test_serialization_from_format() {
 fn test_from_format_json() {
     let v1_json = r#"{"version":"1","name":"Eve"}"#;
     
-    let user = User::from_format(v1_json, |s| serde_json::from_str(s)).unwrap();
+    let user = User::from_format(v1_json, serde_json::from_str).unwrap();
     assert_eq!(user.name, "Eve");
     assert_eq!(user.age, 0);
 }
@@ -125,7 +125,7 @@ fn test_to_format_json() {
         age: 40,
     };
     
-    let json = user.to_format(|v| serde_json::to_string(v)).unwrap();
+    let json = user.to_format(serde_json::to_string).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     
     assert_eq!(parsed["version"], "2");
