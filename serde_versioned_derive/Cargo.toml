@@ -1,6 +1,6 @@
 [package]
 name = "serde_versioned_derive"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Takahiro Kobayashi <takahiro1209work@gmail.com>"]
 description = "Procedural macro for serde_versioned library"
@@ -22,5 +22,5 @@ quote = "1.0"
 proc-macro2 = "1.0"
 
 [dev-dependencies]
-serde_versioned = { path = "../serde_versioned", version = "0.1.0" }
+serde_versioned = { path = "../serde_versioned" }
 serde = { version = "1.0", features = ["derive"] }
