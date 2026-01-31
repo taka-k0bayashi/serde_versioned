@@ -1,5 +1,7 @@
 # serde_versioned
 
+![CI](https://github.com/taka-k0bayashi/serde_versioned/actions/workflows/ci.yml/badge.svg)
+
 A Rust library built on top of the [Serde](https://serde.rs) crate for handling versioned serialization and deserialization of structs with backward compatibility support.
 
 ## Features
