@@ -20,3 +20,7 @@ proc-macro = true
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
+
+[dev-dependencies]
+serde_versioned = { path = "../serde_versioned", version = "0.1.0" }
+serde = { version = "1.0", features = ["derive"] }

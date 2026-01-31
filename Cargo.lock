@@ -117,6 +117,7 @@ name = "serde_versioned"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "serde_versioned_derive",
 ]
 
@@ -126,6 +127,8 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "serde",
+ "serde_versioned",
  "syn",
 ]
 
