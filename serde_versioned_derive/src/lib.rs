@@ -44,6 +44,7 @@ use proc_macro2::TokenStream as TokenStream2;
 ///     pub age: u32,
 /// }
 /// ```
+#[allow(clippy::too_many_lines)]
 #[proc_macro_derive(Versioned, attributes(versioned))]
 pub fn derive_versioned(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -63,7 +64,9 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     if versions.is_empty() {
         return syn::Error::new(
             struct_name.span(),
-            "Please specify version structs using #[versioned(versions = [...])] attribute"
+            format!(
+                "No version structs specified for {struct_name}. Please specify at least one version using #[versioned(versions = [Version1, ...])] attribute.\n\nExample:\n  #[versioned(versions = [{struct_name}V1, {struct_name}V2])]"
+            )
         )
         .to_compile_error()
         .into();
@@ -91,13 +94,28 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     };
     
     // Generate match arms for from_version implementation
+    // Each arm converts the version struct and wraps any error in VersionConversionError
     let from_version_match_arms: Vec<_> = versions.iter().map(|(version_num, version_struct)| {
         let version_ident = syn::Ident::new(
             &format!("Version{version_num}"),
             version_struct.span()
         );
         quote! {
-            #version_enum_name::#version_ident(v) => Ok(serde_versioned::FromVersion::convert(v)),
+            #version_enum_name::#version_ident(v) => {
+                Ok(serde_versioned::FromVersion::convert(v))
+            },
+        }
+    }).collect();
+    
+    // Generate match arms for extract_version_string implementation
+    let extract_version_match_arms: Vec<_> = versions.iter().map(|(version_num, version_struct)| {
+        let version_ident = syn::Ident::new(
+            &format!("Version{version_num}"),
+            version_struct.span()
+        );
+        let version_num_lit = syn::LitStr::new(version_num, version_struct.span());
+        quote! {
+            #version_enum_name::#version_ident(_) => #version_num_lit.to_string(),
         }
     }).collect();
     
@@ -116,10 +134,32 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
                 quote! { #field_name: self.#field_name.clone() }
             }).collect::<Vec<_>>()
         }
+        Data::Struct(DataStruct { fields: Fields::Unnamed(_), .. }) => {
+            return syn::Error::new(
+                struct_name.span(),
+                format!(
+                    "{struct_name}: Versioned derive macro only supports structs with named fields (not tuple structs).\n\nConsider changing:\n  struct {struct_name}(...);\n\nto:\n  struct {struct_name} {{ ... }};"
+                )
+            )
+            .to_compile_error()
+            .into();
+        }
+        Data::Struct(DataStruct { fields: Fields::Unit, .. }) => {
+            return syn::Error::new(
+                struct_name.span(),
+                format!(
+                    "{struct_name}: Versioned derive macro does not support unit structs. The struct must have at least one named field."
+                )
+            )
+            .to_compile_error()
+            .into();
+        }
         _ => {
             return syn::Error::new(
                 struct_name.span(),
-                "Versioned only supports structs with named fields"
+                format!(
+                    "{struct_name}: Versioned derive macro only supports structs, not enums or unions."
+                )
             )
             .to_compile_error()
             .into();
@@ -140,7 +180,7 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
         impl serde_versioned::Versioned for #struct_name {
             type VersionEnum = #version_enum_name;
             
-            fn from_version(version: Self::VersionEnum) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+            fn from_version(version: Self::VersionEnum) -> Result<Self, serde_versioned::VersionConversionError> {
                 match version {
                     #(#from_version_match_arms)*
                 }
@@ -148,6 +188,12 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
             
             fn to_version(&self) -> Self::VersionEnum {
                 #to_version_impl
+            }
+            
+            fn extract_version_string(version: &Self::VersionEnum) -> String {
+                match version {
+                    #(#extract_version_match_arms)*
+                }
             }
         }
     };
@@ -206,7 +252,12 @@ impl syn::parse::Parse for VersionsList {
         // Parse the "versions" identifier
         let ident: syn::Ident = input.parse()?;
         if ident != "versions" {
-            return Err(syn::Error::new(ident.span(), "expected `versions`"));
+            return Err(syn::Error::new(
+                ident.span(),
+                format!(
+                    "Expected `versions`, found `{ident}`. The correct syntax is: #[versioned(versions = [Version1, Version2, ...])]"
+                )
+            ));
         }
         
         // Parse the `=` token

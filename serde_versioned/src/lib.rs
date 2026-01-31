@@ -120,13 +120,14 @@ pub trait Versioned: Sized {
     /// # Returns
     ///
     /// * `Ok(Self)` - Successfully converted struct
-    /// * `Err(Box<dyn Error + Send + Sync>)` - Error during conversion
+    /// * `Err(VersionConversionError)` - Error during conversion with version information
     ///
     /// # Errors
     ///
-    /// Returns an error if the conversion from the versioned struct to the current struct fails.
+    /// Returns a `VersionConversionError` if the conversion from the versioned struct to the current struct fails.
     /// This typically happens when the `FromVersion` implementation fails.
-    fn from_version(version: Self::VersionEnum) -> Result<Self, Box<dyn Error + Send + Sync>>;
+    /// The error includes the version number that failed to convert.
+    fn from_version(version: Self::VersionEnum) -> Result<Self, VersionConversionError>;
     
     /// Converts the current struct instance to its versioned enum representation.
     ///
@@ -169,10 +170,32 @@ pub trait Versioned: Sized {
         F: FnOnce(&'a str) -> Result<Self::VersionEnum, E>,
         E: Error + Send + Sync + 'static,
     {
-        let version = deserializer(input)
-            .map_err(FormatError::Deserialize)?;
-        Self::from_version(version)
-            .map_err(FormatError::VersionConversion)
+        deserializer(input)
+            .map_err(|e| FormatError::deserialize(e, Some(input.to_string())))
+            .and_then(|version| {
+                Self::from_version(version)
+                    .map_err(FormatError::VersionConversion)
+            })
+    }
+    
+    /// Extracts version string from the version enum for error reporting.
+    ///
+    /// This is a helper method that attempts to extract the version number
+    /// from the version enum for use in error messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `version` - The version enum instance
+    ///
+    /// # Returns
+    ///
+    /// A string representation of the version number, or "unknown" if it cannot be determined.
+    #[doc(hidden)]
+    fn extract_version_string(_version: &Self::VersionEnum) -> String {
+        // This is a default implementation that returns "unknown".
+        // The derive macro should override this with a proper implementation
+        // that can extract the version from the enum.
+        "unknown".to_string()
     }
     
     /// Serializes the current struct to a string format via its versioned enum.
@@ -210,22 +233,124 @@ pub trait Versioned: Sized {
     }
 }
 
+/// Error type for version conversion operations.
+///
+/// This error provides detailed information about failures during version conversion,
+/// including which version was being converted from.
+#[derive(Debug)]
+pub struct VersionConversionError {
+    /// The version number that failed to convert (e.g., "1", "2")
+    pub version: String,
+    /// The underlying error that occurred during conversion
+    pub source: Box<dyn Error + Send + Sync + 'static>,
+    /// Additional context about the conversion failure
+    pub context: Option<String>,
+}
+
+impl VersionConversionError {
+    /// Creates a new `VersionConversionError` with the specified version and source error.
+    ///
+    /// # Arguments
+    ///
+    /// * `version` - The version number that failed to convert
+    /// * `source` - The underlying error that occurred
+    pub fn new(version: impl Into<String>, source: Box<dyn Error + Send + Sync + 'static>) -> Self {
+        Self {
+            version: version.into(),
+            source,
+            context: None,
+        }
+    }
+
+    /// Creates a new `VersionConversionError` with additional context.
+    ///
+    /// # Arguments
+    ///
+    /// * `version` - The version number that failed to convert
+    /// * `source` - The underlying error that occurred
+    /// * `context` - Additional context about the failure
+    pub fn with_context(
+        version: impl Into<String>,
+        source: Box<dyn Error + Send + Sync + 'static>,
+        context: impl Into<String>,
+    ) -> Self {
+        Self {
+            version: version.into(),
+            source,
+            context: Some(context.into()),
+        }
+    }
+
+    /// Returns the version number that failed to convert.
+    #[must_use]
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+}
+
+impl Error for VersionConversionError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
+impl std::fmt::Display for VersionConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed to convert from version {}: {}", self.version, self.source)?;
+        if let Some(ref context) = self.context {
+            write!(f, " ({context})")?;
+        }
+        Ok(())
+    }
+}
+
 /// Error type for format conversion operations.
 ///
 /// This enum represents errors that can occur when using `from_format` or `to_format` methods.
 #[derive(Debug)]
 pub enum FormatError<E> {
     /// Error occurred during deserialization of the input string.
-    Deserialize(E),
+    ///
+    /// This variant contains the original deserialization error from the format parser.
+    Deserialize {
+        /// The original deserialization error
+        error: E,
+        /// The input string that failed to deserialize (if available)
+        input: Option<String>,
+    },
     /// Error occurred during conversion from a versioned struct to the current struct.
-    VersionConversion(Box<dyn Error + Send + Sync>),
+    ///
+    /// This variant contains detailed information about the version conversion failure.
+    VersionConversion(VersionConversionError),
+}
+
+impl<E: Error + Send + Sync + 'static> FormatError<E> {
+    /// Creates a new `Deserialize` variant with the error and optional input.
+    pub const fn deserialize(error: E, input: Option<String>) -> Self {
+        Self::Deserialize { error, input }
+    }
+
+    /// Creates a new `VersionConversion` variant from a version conversion error.
+    pub fn version_conversion(version: impl Into<String>, source: Box<dyn Error + Send + Sync + 'static>) -> Self {
+        Self::VersionConversion(VersionConversionError::new(version, source))
+    }
+
+    /// Returns `true` if this is a deserialization error.
+    pub const fn is_deserialize(&self) -> bool {
+        matches!(self, Self::Deserialize { .. })
+    }
+
+    /// Returns `true` if this is a version conversion error.
+    pub const fn is_version_conversion(&self) -> bool {
+        matches!(self, Self::VersionConversion(_))
+    }
 }
 
 impl<E: Error + Send + Sync + 'static> Error for FormatError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Deserialize(e) => Some(e),
-            Self::VersionConversion(e) => Some(e.as_ref()),
+            Self::Deserialize { error, .. } => Some(error),
+            Self::VersionConversion(e) => e.source(),
         }
     }
 }
@@ -233,8 +358,21 @@ impl<E: Error + Send + Sync + 'static> Error for FormatError<E> {
 impl<E: Error + Send + Sync + 'static> std::fmt::Display for FormatError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Deserialize(e) => write!(f, "Deserialization error: {e}"),
-            Self::VersionConversion(e) => write!(f, "Version conversion error: {e}"),
+            Self::Deserialize { error, input } => {
+                write!(f, "Deserialization error: {error}")?;
+                if let Some(input_str) = input {
+                    // Truncate long inputs for readability
+                    if input_str.len() > 100 {
+                        write!(f, " (input: {:?}...)", &input_str[..100])?;
+                    } else {
+                        write!(f, " (input: {input_str:?})")?;
+                    }
+                }
+                Ok(())
+            }
+            Self::VersionConversion(e) => {
+                write!(f, "Version conversion error: {e}")
+            }
         }
     }
 }
