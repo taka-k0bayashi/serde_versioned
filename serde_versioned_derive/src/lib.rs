@@ -118,29 +118,13 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
     };
 
     // Generate match arms for from_version implementation
-    // Each arm converts the version struct and wraps any error in VersionConversionError
     let from_version_match_arms: Vec<_> = versions
         .iter()
         .map(|(version_num, version_struct)| {
             let version_ident =
                 syn::Ident::new(&format!("Version{version_num}"), version_struct.span());
             quote! {
-                #version_enum_name::#version_ident(v) => {
-                    Ok(serde_versioned::FromVersion::convert(v))
-                },
-            }
-        })
-        .collect();
-
-    // Generate match arms for extract_version_string implementation
-    let extract_version_match_arms: Vec<_> = versions
-        .iter()
-        .map(|(version_num, version_struct)| {
-            let version_ident =
-                syn::Ident::new(&format!("Version{version_num}"), version_struct.span());
-            let version_num_lit = syn::LitStr::new(version_num, version_struct.span());
-            quote! {
-                #version_enum_name::#version_ident(_) => #version_num_lit.to_string(),
+                #version_enum_name::#version_ident(v) => serde_versioned::FromVersion::convert(v),
             }
         })
         .collect();
@@ -217,7 +201,7 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
         impl serde_versioned::Versioned for #struct_name {
             type VersionEnum = #version_enum_name;
 
-            fn from_version(version: Self::VersionEnum) -> Result<Self, serde_versioned::VersionConversionError> {
+            fn from_version(version: Self::VersionEnum) -> Self {
                 match version {
                     #(#from_version_match_arms)*
                 }
@@ -225,12 +209,6 @@ pub fn derive_versioned(input: TokenStream) -> TokenStream {
 
             fn to_version(&self) -> Self::VersionEnum {
                 #to_version_impl
-            }
-
-            fn extract_version_string(version: &Self::VersionEnum) -> String {
-                match version {
-                    #(#extract_version_match_arms)*
-                }
             }
         }
     };
