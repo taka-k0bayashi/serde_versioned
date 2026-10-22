@@ -10,7 +10,7 @@ A Rust library built on top of the [Serde](https://serde.rs) crate for handling 
 - **Backward Compatibility**: Automatically convert older versions to the current version
 - **Type Safety**: Compile-time guarantees for version conversions
 - **Serde Integration**: Seamless integration with serde for serialization/deserialization
-- **Flexible Format Support**: Works with any format supported by serde (JSON, YAML, TOML, etc.)
+- **Flexible Format Support**: Works with self-describing formats supported by serde (JSON, YAML, TOML, etc.)
 
 ## Installation
 
@@ -32,21 +32,21 @@ use serde_versioned::{Versioned, FromVersion};
 use serde::{Serialize, Deserialize};
 
 // Define your current struct
-#[derive(Versioned, Serialize, Deserialize, Debug, PartialEq, Clone)]
-#[versioned(versions = [UserV1, UserV2])]
+#[derive(Versioned, Debug, PartialEq)]
+#[versioned(versions = [1 => UserV1, 2 => UserV2])]
 struct User {
     pub name: String,
     pub age: u32,
 }
 
 // Define version 1 (older version)
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct UserV1 {
     pub name: String,
 }
 
 // Define version 2 (current version)
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct UserV2 {
     pub name: String,
     pub age: u32,
@@ -84,7 +84,7 @@ let user = User {
 let version = user.to_version();
 
 // Convert versioned enum back to current struct
-let restored = User::from_version(version).unwrap();
+let restored = User::from_version(version);
 assert_eq!(user, restored);
 ```
 
@@ -104,7 +104,7 @@ let json = serde_json::to_string(&version).unwrap();
 
 // Deserialize from JSON
 let version_restored: UserVersion = serde_json::from_str(&json).unwrap();
-let user_restored = User::from_version(version_restored).unwrap();
+let user_restored = User::from_version(version_restored);
 assert_eq!(user, user_restored);
 ```
 
@@ -132,22 +132,61 @@ let json = user.to_format(serde_json::to_string).unwrap();
 let user = User::from_format(&json, serde_json::from_str).unwrap();
 ```
 
+### Serializing the Struct Directly
+
+The derive also implements `From` between the struct and its version enum, so serde's
+`from`/`into` attributes make the struct itself read any version and write the latest one.
+This works anywhere serde does, including inside other types:
+
+```rust
+#[derive(Versioned, Serialize, Deserialize, Clone)]
+#[serde(from = "UserVersion", into = "UserVersion")]
+#[versioned(versions = [1 => UserV1, 2 => UserV2])]
+struct User {
+    pub name: String,
+    pub age: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Team {
+    members: Vec<User>, // each member is read from any version and written as version 2
+}
+```
+
+## Version Numbers
+
+- The number before `=>` is written to the `"version"` field as a string (`"version": "1"`;
+  in TOML write `version = "1"`, not `version = 1`).
+- Never change a number once data has been written with it. Numbers must be strictly
+  increasing, and the last entry is the latest version.
+- Removing an old version is safe: the other numbers stay the same, and data stored with the
+  removed version fails to deserialize.
+
 ## Requirements
 
-- The struct must have named fields (tuple structs and unit structs are not supported)
+- The struct must have named fields and no generic parameters (tuple structs and unit structs are not supported)
+- Every field of the struct must implement `Clone`
+- The latest version struct must have the same field names as the struct
 - Each version struct must implement:
   - `Serialize` and `Deserialize` (from serde)
-  - `Clone`
   - `FromVersion<CurrentStruct>` trait
+
+## Limitations
+
+- The version is stored as a field inside the data (an internally tagged enum), so only
+  self-describing formats such as JSON, YAML and TOML are supported. Formats like bincode can
+  serialize the data but cannot deserialize it.
+- The serialized data cannot contain another field named `version`. If a version struct has a
+  `version` field, rename it with `#[serde(rename = "...")]`.
 
 ## Examples
 
 See the `tests/test.rs` file for more comprehensive examples including:
 - Version conversion
-- JSON serialization/deserialization
-- Handling multiple versions
-- Default value handling for missing fields
+- JSON, TOML and YAML serialization/deserialization
+- Handling multiple versions, referenced by path
+- Using versioned structs inside other structs
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
