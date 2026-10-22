@@ -6,23 +6,23 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust
 //! use serde_versioned::{Versioned, FromVersion};
 //! use serde::{Serialize, Deserialize};
 //!
-//! #[derive(Versioned, Serialize, Deserialize, Clone)]
-//! #[versioned(versions = [UserV1, UserV2])]
+//! #[derive(Versioned)]
+//! #[versioned(versions = [1 => UserV1, 2 => UserV2])]
 //! struct User {
 //!     pub name: String,
 //!     pub age: u32,
 //! }
 //!
-//! #[derive(Serialize, Deserialize, Clone)]
+//! #[derive(Serialize, Deserialize)]
 //! pub struct UserV1 {
 //!     pub name: String,
 //! }
 //!
-//! #[derive(Serialize, Deserialize, Clone)]
+//! #[derive(Serialize, Deserialize)]
 //! pub struct UserV2 {
 //!     pub name: String,
 //!     pub age: u32,
@@ -39,6 +39,15 @@
 //!         User { name: self.name, age: self.age }
 //!     }
 //! }
+//!
+//! // Data is always written as the latest version
+//! let json = User { name: "Alice".to_string(), age: 30 }.to_format(serde_json::to_string)?;
+//! assert_eq!(json, r#"{"version":"2","name":"Alice","age":30}"#);
+//!
+//! // Older versions are converted when read
+//! let user = User::from_format(r#"{"version":"1","name":"Bob"}"#, serde_json::from_str)?;
+//! assert_eq!(user.age, 0);
+//! # Ok::<(), serde_json::Error>(())
 //! ```
 
 use serde::{Serialize, de::DeserializeOwned};
@@ -52,7 +61,7 @@ pub use serde_versioned_derive::Versioned;
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust
 /// use serde_versioned::FromVersion;
 ///
 /// struct User { name: String, age: u32 }
@@ -84,50 +93,34 @@ pub trait FromVersion<T>: Sized {
 ///
 /// # Example
 ///
-/// ```rust,no_run
-/// use serde_versioned::Versioned;
-/// use serde::{Deserialize, Serialize};
-///
-/// #[derive(Versioned, Serialize, Deserialize)]
-/// #[versioned(versions = [UserV1, UserV2])]
-/// struct User {
-///     name: String,
-///     age: u32,
-/// }
-///
-/// #[derive(Serialize, Deserialize)]
-/// struct UserV1 {
-///     name: String,
-/// }
-///
-/// #[derive(Serialize, Deserialize)]
-/// struct UserV2 {
-///     name: String,
-///     age: u32,
-/// }
-///
-/// impl serde_versioned::FromVersion<User> for UserV1 {
-///     fn convert(self) -> User {
-///         User { name: self.name, age: 0 }
-///     }
-/// }
-///
-/// impl serde_versioned::FromVersion<User> for UserV2 {
-///     fn convert(self) -> User {
-///         User { name: self.name, age: self.age }
-///     }
-/// }
-///
+/// ```rust
+/// # use serde::{Deserialize, Serialize};
+/// # use serde_versioned::{FromVersion, Versioned};
+/// # #[derive(Versioned)]
+/// # #[versioned(versions = [1 => UserV1, 2 => UserV2])]
+/// # struct User { name: String, age: u32 }
+/// # #[derive(Serialize, Deserialize)]
+/// # struct UserV1 { name: String }
+/// # #[derive(Serialize, Deserialize)]
+/// # struct UserV2 { name: String, age: u32 }
+/// # impl FromVersion<User> for UserV1 {
+/// #     fn convert(self) -> User { User { name: self.name, age: 0 } }
+/// # }
+/// # impl FromVersion<User> for UserV2 {
+/// #     fn convert(self) -> User { User { name: self.name, age: self.age } }
+/// # }
 /// // Convert to versioned enum
 /// let user = User { name: "Alice".to_string(), age: 30 };
 /// let version = user.to_version();
 ///
 /// // Serialize to JSON
-/// let json = serde_json::to_string(&version).unwrap();
+/// let json = serde_json::to_string(&version)?;
 ///
 /// // Deserialize and convert back
-/// let version: UserVersion = serde_json::from_str(&json).unwrap();
+/// let version: UserVersion = serde_json::from_str(&json)?;
 /// let user = User::from_version(version);
+/// assert_eq!(user.age, 30);
+/// # Ok::<(), serde_json::Error>(())
 /// ```
 pub trait Versioned: Sized {
     /// The version enum type that represents all versions of this struct.
@@ -164,42 +157,26 @@ pub trait Versioned: Sized {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
-    /// use serde_versioned::Versioned;
-    /// use serde::{Deserialize, Serialize};
-    ///
-    /// #[derive(Versioned, Serialize, Deserialize)]
-    /// #[versioned(versions = [UserV1, UserV2])]
-    /// struct User {
-    ///     name: String,
-    ///     age: u32,
-    /// }
-    ///
-    /// #[derive(Serialize, Deserialize)]
-    /// struct UserV1 {
-    ///     name: String,
-    /// }
-    ///
-    /// #[derive(Serialize, Deserialize)]
-    /// struct UserV2 {
-    ///     name: String,
-    ///     age: u32,
-    /// }
-    ///
-    /// impl serde_versioned::FromVersion<User> for UserV1 {
-    ///     fn convert(self) -> User {
-    ///         User { name: self.name, age: 0 }
-    ///     }
-    /// }
-    ///
-    /// impl serde_versioned::FromVersion<User> for UserV2 {
-    ///     fn convert(self) -> User {
-    ///         User { name: self.name, age: self.age }
-    ///     }
-    /// }
-    ///
+    /// ```rust
+    /// # use serde::{Deserialize, Serialize};
+    /// # use serde_versioned::{FromVersion, Versioned};
+    /// # #[derive(Versioned)]
+    /// # #[versioned(versions = [1 => UserV1, 2 => UserV2])]
+    /// # struct User { name: String, age: u32 }
+    /// # #[derive(Serialize, Deserialize)]
+    /// # struct UserV1 { name: String }
+    /// # #[derive(Serialize, Deserialize)]
+    /// # struct UserV2 { name: String, age: u32 }
+    /// # impl FromVersion<User> for UserV1 {
+    /// #     fn convert(self) -> User { User { name: self.name, age: 0 } }
+    /// # }
+    /// # impl FromVersion<User> for UserV2 {
+    /// #     fn convert(self) -> User { User { name: self.name, age: self.age } }
+    /// # }
     /// let json = r#"{"version":"1","name":"Alice"}"#;
-    /// let user = User::from_format(json, serde_json::from_str).unwrap();
+    /// let user = User::from_format(json, serde_json::from_str)?;
+    /// assert_eq!(user.age, 0);
+    /// # Ok::<(), serde_json::Error>(())
     /// ```
     fn from_format<'a, F, E>(input: &'a str, deserializer: F) -> Result<Self, E>
     where
@@ -228,42 +205,26 @@ pub trait Versioned: Sized {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
-    /// use serde_versioned::Versioned;
-    /// use serde::{Deserialize, Serialize};
-    ///
-    /// #[derive(Versioned, Serialize, Deserialize)]
-    /// #[versioned(versions = [UserV1, UserV2])]
-    /// struct User {
-    ///     name: String,
-    ///     age: u32,
-    /// }
-    ///
-    /// #[derive(Serialize, Deserialize)]
-    /// struct UserV1 {
-    ///     name: String,
-    /// }
-    ///
-    /// #[derive(Serialize, Deserialize)]
-    /// struct UserV2 {
-    ///     name: String,
-    ///     age: u32,
-    /// }
-    ///
-    /// impl serde_versioned::FromVersion<User> for UserV1 {
-    ///     fn convert(self) -> User {
-    ///         User { name: self.name, age: 0 }
-    ///     }
-    /// }
-    ///
-    /// impl serde_versioned::FromVersion<User> for UserV2 {
-    ///     fn convert(self) -> User {
-    ///         User { name: self.name, age: self.age }
-    ///     }
-    /// }
-    ///
+    /// ```rust
+    /// # use serde::{Deserialize, Serialize};
+    /// # use serde_versioned::{FromVersion, Versioned};
+    /// # #[derive(Versioned)]
+    /// # #[versioned(versions = [1 => UserV1, 2 => UserV2])]
+    /// # struct User { name: String, age: u32 }
+    /// # #[derive(Serialize, Deserialize)]
+    /// # struct UserV1 { name: String }
+    /// # #[derive(Serialize, Deserialize)]
+    /// # struct UserV2 { name: String, age: u32 }
+    /// # impl FromVersion<User> for UserV1 {
+    /// #     fn convert(self) -> User { User { name: self.name, age: 0 } }
+    /// # }
+    /// # impl FromVersion<User> for UserV2 {
+    /// #     fn convert(self) -> User { User { name: self.name, age: self.age } }
+    /// # }
     /// let user = User { name: "Alice".to_string(), age: 30 };
-    /// let json = user.to_format(serde_json::to_string).unwrap();
+    /// let json = user.to_format(serde_json::to_string)?;
+    /// assert_eq!(json, r#"{"version":"2","name":"Alice","age":30}"#);
+    /// # Ok::<(), serde_json::Error>(())
     /// ```
     fn to_format<F, T, E>(&self, serializer: F) -> Result<T, E>
     where
