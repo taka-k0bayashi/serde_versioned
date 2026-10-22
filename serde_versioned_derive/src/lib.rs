@@ -16,6 +16,8 @@ use syn::{Data, DataStruct, DeriveInput, Fields, Token, parse_macro_input};
 /// This macro generates:
 /// - A version enum (e.g., `UserVersion`) with variants for each version
 /// - Implementation of `Versioned` trait with `from_version` and `to_version` methods
+/// - `From` conversions in both directions between the struct and the version enum, so the
+///   struct can use `#[serde(from = "UserVersion", into = "UserVersion")]`
 ///
 /// # Attributes
 ///
@@ -183,6 +185,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             fn to_version(&self) -> Self::VersionEnum {
                 #version_enum_name::#latest_variant(#latest_struct {
                     #(#fields: self.#fields.clone(),)*
+                })
+            }
+        }
+
+        // Lets the struct use #[serde(from = "...Version", into = "...Version")]
+        impl ::core::convert::From<#version_enum_name> for #struct_name {
+            fn from(version: #version_enum_name) -> Self {
+                <Self as ::serde_versioned::Versioned>::from_version(version)
+            }
+        }
+
+        impl ::core::convert::From<#struct_name> for #version_enum_name {
+            fn from(value: #struct_name) -> Self {
+                #version_enum_name::#latest_variant(#latest_struct {
+                    #(#fields: value.#fields,)*
                 })
             }
         }

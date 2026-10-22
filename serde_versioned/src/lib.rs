@@ -49,6 +49,44 @@
 //! assert_eq!(user.age, 0);
 //! # Ok::<(), serde_json::Error>(())
 //! ```
+//!
+//! ## Serializing the struct directly
+//!
+//! The derive also implements `From` between the struct and its version enum, so serde's
+//! `from`/`into` attributes make the struct itself read any version and write the latest one,
+//! even when it is nested inside other types:
+//!
+//! ```rust
+//! # use serde_versioned::{FromVersion, Versioned};
+//! # use serde::{Deserialize, Serialize};
+//! #[derive(Versioned, Serialize, Deserialize, Clone)]
+//! #[serde(from = "UserVersion", into = "UserVersion")]
+//! #[versioned(versions = [1 => UserV1, 2 => UserV2])]
+//! struct User {
+//!     pub name: String,
+//!     pub age: u32,
+//! }
+//! # #[derive(Serialize, Deserialize)]
+//! # struct UserV1 { name: String }
+//! # #[derive(Serialize, Deserialize)]
+//! # struct UserV2 { name: String, age: u32 }
+//! # impl FromVersion<User> for UserV1 {
+//! #     fn convert(self) -> User { User { name: self.name, age: 0 } }
+//! # }
+//! # impl FromVersion<User> for UserV2 {
+//! #     fn convert(self) -> User { User { name: self.name, age: self.age } }
+//! # }
+//!
+//! #[derive(Serialize, Deserialize)]
+//! struct Team {
+//!     members: Vec<User>,
+//! }
+//!
+//! let team: Team = serde_json::from_str(r#"{"members":[{"version":"1","name":"Bob"}]}"#)?;
+//! let json = serde_json::to_string(&team)?;
+//! assert_eq!(json, r#"{"members":[{"version":"2","name":"Bob","age":0}]}"#);
+//! # Ok::<(), serde_json::Error>(())
+//! ```
 
 use serde::{Serialize, de::DeserializeOwned};
 
