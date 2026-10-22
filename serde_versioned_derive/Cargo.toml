@@ -1,23 +1,24 @@
 [package]
 name = "serde_versioned_derive"
-version = "0.2.0"
-edition = "2024"
-authors = ["Takahiro Kobayashi <takahiro1209work@gmail.com>"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
 description = "Procedural macro for serde_versioned library"
-license = "MIT"
-repository = "https://github.com/taka-k0bayashi/serde_versioned"
-homepage   = "https://github.com/taka-k0bayashi/serde_versioned"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/serde_versioned_derive"
 keywords = ["serde", "serialization", "versioning", "proc-macro", "derive"]
-categories = ["encoding", "no-std"]
-readme = "../README.md"
+categories.workspace = true
+readme.workspace = true
 
 [lib]
 name = "serde_versioned_derive"
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0", features = ["full"] }
+syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"
 
