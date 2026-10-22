@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_versioned::{FromVersion, Versioned};
 
 // Version 3 was dropped: removing an entry never renumbers the others.
-#[derive(Versioned, Debug, PartialEq)]
+#[derive(Versioned, Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(from = "UserVersion", into = "UserVersion")]
 #[versioned(versions = [1 => UserV1, 2 => UserV2, 4 => models::UserV4])]
 struct User {
     pub name: String,
@@ -115,6 +116,24 @@ fn test_older_versions_are_converted() {
     let v1_yaml = "version: \"1\"\nname: Kate\n";
     let from_yaml = User::from_format(v1_yaml, serde_yaml::from_str).unwrap();
     assert_eq!(from_yaml.name, "Kate");
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct Team {
+    owner: User,
+    members: Vec<User>,
+}
+
+#[test]
+fn test_nested_with_serde_from_into() {
+    let json = r#"{"owner":{"version":"1","name":"Bob"},"members":[{"version":"2","name":"Carol","age":25}]}"#;
+    let team: Team = serde_json::from_str(json).unwrap();
+    assert_eq!(team.owner.age, 0);
+    assert_eq!(team.members[0].age, 25);
+
+    let written = serde_json::to_string(&team).unwrap();
+    assert!(written.contains(r#"{"version":"4","name":"Bob","age":0,"email":null}"#));
+    assert_eq!(serde_json::from_str::<Team>(&written).unwrap(), team);
 }
 
 #[test]
