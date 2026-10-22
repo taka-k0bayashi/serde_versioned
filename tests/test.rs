@@ -92,8 +92,8 @@ fn test_roundtrip_all_formats() {
     let from_toml = User::from_format(&toml_str, toml::from_str).unwrap();
     assert_eq!(from_toml, user);
 
-    let yaml_str = user.to_format(serde_yaml::to_string).unwrap();
-    let from_yaml = User::from_format(&yaml_str, serde_yaml::from_str).unwrap();
+    let yaml_str = user.to_format(serde_yaml_ng::to_string).unwrap();
+    let from_yaml = User::from_format(&yaml_str, serde_yaml_ng::from_str).unwrap();
     assert_eq!(from_yaml, user);
 }
 
@@ -114,7 +114,7 @@ fn test_older_versions_are_converted() {
     assert_eq!(from_toml.name, "Henry");
 
     let v1_yaml = "version: \"1\"\nname: Kate\n";
-    let from_yaml = User::from_format(v1_yaml, serde_yaml::from_str).unwrap();
+    let from_yaml = User::from_format(v1_yaml, serde_yaml_ng::from_str).unwrap();
     assert_eq!(from_yaml.name, "Kate");
 }
 
