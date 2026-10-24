@@ -87,10 +87,122 @@
 //! assert_eq!(json, r#"{"members":[{"version":"2","name":"Bob","age":0}]}"#);
 //! # Ok::<(), serde_json::Error>(())
 //! ```
+//!
+//! ## Document versions
+//!
+//! For a file made of many nested types, the version can be written once at the root instead.
+//! `#[versioned(document = N)]` marks the root and `N` is the current version of the whole
+//! file. A nested type lists the document versions at which its shape changed, ending with
+//! `Self`; types that never changed stay plain serde types. Bump `N` whenever any type changes.
+//!
+//! ```rust
+//! # use serde_versioned::{FromVersion, Versioned};
+//! # use serde::{Deserialize, Serialize};
+//! #[derive(Versioned)]
+//! #[versioned(document = 2)]
+//! struct Project {
+//!     teams: Vec<Team>,
+//! }
+//!
+//! #[derive(Serialize, Deserialize)]
+//! struct Team {
+//!     members: Vec<User>,
+//! }
+//!
+//! // Documents 1 used UserV1, documents 2 and later use the current shape
+//! #[derive(Versioned)]
+//! #[versioned(versions = [1 => UserV1, 2 => Self])]
+//! struct User {
+//!     name: String,
+//!     age: u32,
+//! }
+//!
+//! #[derive(Deserialize)]
+//! struct UserV1 {
+//!     name: String,
+//! }
+//!
+//! impl FromVersion<User> for UserV1 {
+//!     fn convert(self) -> User {
+//!         User { name: self.name, age: 0 }
+//!     }
+//! }
+//!
+//! let project: Project =
+//!     serde_json::from_str(r#"{"version":"1","teams":[{"members":[{"name":"Bob"}]}]}"#)?;
+//! let json = serde_json::to_string(&project)?;
+//! assert_eq!(json, r#"{"version":"2","teams":[{"members":[{"name":"Bob","age":0}]}]}"#);
+//! # Ok::<(), serde_json::Error>(())
+//! ```
+
+use std::cell::Cell;
 
 use serde::{Serialize, de::DeserializeOwned};
 
 pub use serde_versioned_derive::Versioned;
+
+thread_local! {
+    static DOCUMENT_VERSION: Cell<Option<u32>> = const { Cell::new(None) };
+}
+
+/// Returns the version of the document being deserialized on this thread, if any.
+///
+/// Set by `#[versioned(document = N)]` roots while their contents are read, and by
+/// [`with_document_version`].
+pub fn document_version() -> Option<u32> {
+    DOCUMENT_VERSION.with(Cell::get)
+}
+
+/// Runs `f` as if inside a document of the given version.
+///
+/// Use it to deserialize a document member on its own as an older version; outside any
+/// document, members are read as their latest version. The previous value is restored when
+/// `f` returns or panics.
+///
+/// ```rust
+/// # use serde_versioned::{FromVersion, Versioned};
+/// # use serde::Deserialize;
+/// #[derive(Versioned)]
+/// #[versioned(versions = [1 => UserV1, 3 => Self])]
+/// struct User { name: String, age: u32 }
+///
+/// #[derive(Deserialize)]
+/// struct UserV1 { name: String }
+///
+/// impl FromVersion<User> for UserV1 {
+///     fn convert(self) -> User { User { name: self.name, age: 0 } }
+/// }
+///
+/// let user: User = serde_versioned::with_document_version(2, || {
+///     serde_json::from_str(r#"{"name":"Bob"}"#)
+/// })?;
+/// assert_eq!(user.age, 0);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+pub fn with_document_version<R>(version: u32, f: impl FnOnce() -> R) -> R {
+    struct Restore(Option<u32>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            DOCUMENT_VERSION.with(|v| v.set(self.0));
+        }
+    }
+    let _restore = Restore(DOCUMENT_VERSION.with(|v| v.replace(Some(version))));
+    f()
+}
+
+#[doc(hidden)]
+pub mod __private {
+    use serde::{Deserialize, Deserializer};
+
+    /// Deserializes `T` inside a document of version `N`; used by `#[versioned(document = N)]`.
+    pub struct Scoped<T, const N: u32>(pub T);
+
+    impl<'de, T: Deserialize<'de>, const N: u32> Deserialize<'de> for Scoped<T, N> {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            crate::with_document_version(N, || T::deserialize(deserializer)).map(Scoped)
+        }
+    }
+}
 
 /// Trait for converting from a versioned struct to the current struct.
 ///
