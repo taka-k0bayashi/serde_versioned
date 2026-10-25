@@ -210,9 +210,13 @@ struct Settings {
   A root whose own fields change takes `versions = [..., N => Self]` too.
 - A member read on its own (outside any document) is read as its latest shape. Use
   `serde_versioned::with_document_version(n, || ...)` to read it as document version `n`.
-- A forgotten bump cannot be detected at compile time. Keep a file written by every document
-  version in your tests, check that they all still deserialize, and check that the current
-  data serializes exactly to the latest one (see `tests/document.rs`).
+- Writing a member whose `N => Self` is newer than the enclosing root's `document` fails
+  with an error asking you to bump `document`, so a forgotten bump never produces a file.
+  A change that adds no `N => Self` entry cannot be detected, so keep a file written by every
+  document version in your tests, check that they all still deserialize, and check that the
+  current data serializes exactly to the latest one (see `tests/document.rs`).
+- If old files still deserialize into the new shape (for example a new field with
+  `#[serde(default)]`), add no entry and keep `document` unchanged.
 
 ## Requirements
 

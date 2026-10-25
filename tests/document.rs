@@ -155,6 +155,29 @@ fn members_read_alone() {
     );
 }
 
+// User changed in document 3, but this root was not bumped
+#[derive(Versioned)]
+#[versioned(document = 2)]
+struct Stale {
+    user: User,
+}
+
+#[test]
+fn rejects_writing_a_member_newer_than_its_document() {
+    let stale = Stale {
+        user: User {
+            name: "A".to_string(),
+            age: 1,
+        },
+    };
+    let error = serde_json::to_string(&stale).unwrap_err().to_string();
+    assert!(
+        error.contains("`User` is at document version 3 but is written in document version 2"),
+        "{error}"
+    );
+    assert_eq!(document_version(), None);
+}
+
 #[test]
 fn rejects_unknown_versions_and_restores_scope() {
     let future = V3.replace(r#""version":"3""#, r#""version":"4""#);
