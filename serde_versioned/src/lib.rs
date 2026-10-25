@@ -147,8 +147,53 @@ thread_local! {
 
 /// Returns the version of the document being deserialized on this thread, if any.
 ///
-/// Set by `#[versioned(document = N)]` roots while their contents are read, and by
+/// Set by `#[versioned(document = N)]` roots while their contents are read or written, and by
 /// [`with_document_version`].
+///
+/// Use it to write a `Deserialize` by hand for a document member the derive does not support,
+/// such as an enum. A hand-written member is not checked against the document version when it
+/// is written, so bump `document` yourself when its shape changes.
+///
+/// ```rust
+/// use serde::{Deserialize, Deserializer, Serialize, Serializer};
+/// use serde_versioned::Versioned;
+///
+/// #[derive(Versioned)]
+/// #[versioned(document = 2)]
+/// struct Drawing {
+///     shapes: Vec<Shape>,
+/// }
+///
+/// // `remote = "Self"` makes serde generate `Shape::serialize`/`Shape::deserialize` as plain
+/// // functions, so the trait impls below can wrap them
+/// #[derive(Serialize, Deserialize)]
+/// #[serde(remote = "Self")]
+/// enum Shape {
+///     Circle(f64),
+///     Square(f64),
+/// }
+///
+/// impl<'de> Deserialize<'de> for Shape {
+///     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+///         match serde_versioned::document_version() {
+///             // Document 1 stored only the radius of a circle
+///             Some(1) => f64::deserialize(deserializer).map(Shape::Circle),
+///             _ => Shape::deserialize(deserializer),
+///         }
+///     }
+/// }
+///
+/// impl Serialize for Shape {
+///     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+///         Shape::serialize(self, serializer)
+///     }
+/// }
+///
+/// let drawing: Drawing = serde_json::from_str(r#"{"version":"1","shapes":[1.5]}"#)?;
+/// let json = serde_json::to_string(&drawing)?;
+/// assert_eq!(json, r#"{"version":"2","shapes":[{"Circle":1.5}]}"#);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
 pub fn document_version() -> Option<u32> {
     DOCUMENT_VERSION.with(Cell::get)
 }
