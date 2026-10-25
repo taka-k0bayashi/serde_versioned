@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 ### Added
 
 - Document versions: `#[versioned(document = N)]` writes `"version"` once at the root, and
   nested types declared with `#[versioned(versions = [1 => UserV1, 3 => Self])]` are read
   according to it. Unchanged nested types stay plain serde types. Roots can be nested.
+  Writing a member newer than its root's `document` fails instead of producing a file that
+  cannot be read back.
 - `with_document_version` and `document_version` to read a document member on its own.
 
 ## 0.3.0
