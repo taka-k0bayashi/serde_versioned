@@ -320,6 +320,8 @@ fn expand_member(
 ) -> TokenStream2 {
     let struct_name = &input.ident;
     let (shadow, dispatch) = scoped_parts(input, fields, versions);
+    let name = struct_name.to_string();
+    let latest = versions[versions.len() - 1].number;
     quote! {
         const _: () = {
             #shadow
@@ -329,6 +331,18 @@ fn expand_member(
                     &self,
                     serializer: S,
                 ) -> ::core::result::Result<S::Ok, S::Error> {
+                    // Writing the current shape under an older document label could not be
+                    // read back, so the enclosing root must have been bumped
+                    if let ::core::option::Option::Some(v) = ::serde_versioned::document_version() {
+                        if v < #latest {
+                            return ::core::result::Result::Err(
+                                <S::Error as ::serde::ser::Error>::custom(::core::format_args!(
+                                    "`{}` is at document version {} but is written in document version {}; bump `document` of the enclosing root",
+                                    #name, #latest, v
+                                )),
+                            );
+                        }
+                    }
                     __Shadow::serialize(self, serializer)
                 }
             }
@@ -379,7 +393,9 @@ fn expand_document(
                     &self,
                     serializer: S,
                 ) -> ::core::result::Result<S::Ok, S::Error> {
-                    __Shadow::serialize(self.0, serializer)
+                    ::serde_versioned::with_document_version(#document, || {
+                        __Shadow::serialize(self.0, serializer)
+                    })
                 }
             }
 
